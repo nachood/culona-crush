@@ -3,6 +3,8 @@ const LOGIN_PASS = "lunita123";
 const STORAGE_KEY = "selenaunicornio-roulette-state-v1";
 const DAILY_RESET_HOUR = 6;
 const RESET_TIME_ZONE = "America/Argentina/Buenos_Aires";
+const CRUSH_PROGRESS_VERSION = 2;
+const CRUSH_HINTS_PER_LEVEL = 3;
 const DEV_INFINITE_SPINS = false;
 const DEV_REPLAY_MINIGAME = false;
 const CRUSH_AVATAR_IMAGE = "culonacrush.png";
@@ -29,7 +31,12 @@ const crushLevels = [
   { level: 17, target: 6, moves: 14, message: "No me voy a cansar de decir que sos mi mejor soporte tanto en el Lol como en la vida bb<3" },
   { level: 18, target: 6, moves: 13, message: "Te amo muchomuchomucho Je" },
   { level: 19, target: 7, moves: 15, message: "Unas ganas de ser tu microfono asi me puteas asi de rico 😔" },
-  { level: 20, target: 7, moves: 14, message: "LLegaste al final de CULONA CRUSH (por ahora jeje). Siempre me van a encantar hacer estas cosas y feliz 8vo mes amor mio, desde que llegaste a mi vida a pesar de las peleas y mil cosas que pasamos siempre voy a decir que sos lo mejor y te quedaste en mi corazon para siempre hacerme mejor y nunca me voy a cansar de pasar mi tiempo con vos bb<3, tu novio esta bastante tontito por vos sabias? mi compañera de vida jiji" }
+  { level: 20, target: 7, moves: 14, message: "LLegaste al final de CULONA CRUSH (por ahora jeje). Siempre me van a encantar hacer estas cosas y feliz 8vo mes amor mio, desde que llegaste a mi vida a pesar de las peleas y mil cosas que pasamos siempre voy a decir que sos lo mejor y te quedaste en mi corazon para siempre hacerme mejor y nunca me voy a cansar de pasar mi tiempo con vos bb<3, tu novio esta bastante tontito por vos sabias? mi compañera de vida jiji" },
+  { level: 21, target: 6, moves: 16, message: "mmm parece que tendre que subir un poco mas el nivel" },
+  { level: 22, target: 7, moves: 16, message: "okey okey okey, no me hagas calentaaar bella jugadora" },
+  { level: 23, target: 7, moves: 15, message: "emmm emmm.... NO TE LO VOY A PONER TAN FACIL MUJER HERMOSA OK" },
+  { level: 24, target: 8, moves: 15, message: "T-TENGO M-MIEDO DIJO EL AURONPLAY, OOOOU NOOO DIJO JERE, JUEGA DEMASIALO QLIAO DIJO HAN..... CONFIO EN VOS NIVEL 25" },
+  { level: 25, target: 8, moves: 14, message: "LO-LOGRASTE... ES IMPOSIBLE GANARLE A LA MEJOR JUGADORA DE CULONACRUSH DE LA HISTORIA.... ME GANASTE PERO.... YA VAS A VER x.x" }
 ];
 const crushPieces = [
   { id: CRUSH_SPECIAL, label: "Ella", icon: "💖" },
@@ -163,7 +170,18 @@ rewardModal.addEventListener("click", (event) => {
 function loadState() {
   const fallback = makeFreshState();
   try {
-    return { ...fallback, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") };
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    const loaded = { ...fallback, ...saved };
+    if (!loaded.crushHintsUsed || typeof loaded.crushHintsUsed !== "object") loaded.crushHintsUsed = {};
+    if (Number(saved.crushProgressVersion || 1) < CRUSH_PROGRESS_VERSION) {
+      if (loaded.crushCompleted && loaded.crushUnlockedLevel >= 20) {
+        loaded.crushUnlockedLevel = Math.max(loaded.crushUnlockedLevel, 21);
+      }
+      loaded.crushCompleted = false;
+      loaded.crushProgressVersion = CRUSH_PROGRESS_VERSION;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
+    }
+    return loaded;
   } catch {
     return fallback;
   }
@@ -176,6 +194,8 @@ function makeFreshState() {
     finalUnlocked: false,
     crushUnlockedLevel: 1,
     crushCompleted: false,
+    crushHintsUsed: {},
+    crushProgressVersion: CRUSH_PROGRESS_VERSION,
     spins: 1,
     extraWonForDay: false,
     lastResetKey: getResetKey(new Date())
@@ -526,24 +546,27 @@ function showCrushGame() {
 function renderLevelGrid() {
   levelGrid.innerHTML = crushLevels.map((level) => {
     const unlocked = level.level <= state.crushUnlockedLevel;
-    const completed = level.level < state.crushUnlockedLevel || state.crushCompleted;
+    const completed = level.level < state.crushUnlockedLevel || (state.crushCompleted && level.level === crushLevels.length);
     const milestone = level.level % 5 === 0;
     return `
       <button class="level-button ${completed ? "completed" : ""}" type="button" data-level="${level.level}" ${unlocked ? "" : "disabled"}>
         <span class="level-number">${unlocked ? level.level : "🔒"}</span>
         ${completed ? '<span class="level-star" aria-label="Nivel superado">★</span>' : ""}
-        ${milestone && unlocked ? `<span class="level-stamp" aria-label="Hito cada cinco niveles">${level.level === 20 ? "👑" : "🎀"}</span>` : ""}
+        ${milestone && unlocked ? `<span class="level-stamp" aria-label="Hito cada cinco niveles">${level.level === 25 ? "👑" : "🎀"}</span>` : ""}
         <small>${completed ? "Pasado" : unlocked ? `${level.target} combos` : "Bloqueado"}</small>
       </button>
     `;
   }).join("");
 
   levelGrid.querySelectorAll(".level-button:not(:disabled)").forEach((button) => {
-    button.addEventListener("click", () => startMiniGame(Number(button.dataset.level)));
+    button.addEventListener("click", () => {
+      const level = Number(button.dataset.level);
+      startMiniGame(level, level === 21);
+    });
   });
 }
 
-function startMiniGame(levelNumber = miniGame?.level || state.crushUnlockedLevel || 1) {
+function startMiniGame(levelNumber = miniGame?.level || state.crushUnlockedLevel || 1, showThresholdIntro = false) {
   const levelConfig = crushLevels.find((level) => level.level === levelNumber) || crushLevels[0];
   miniGame = {
     level: levelConfig.level,
@@ -552,6 +575,9 @@ function startMiniGame(levelNumber = miniGame?.level || state.crushUnlockedLevel
     selected: null,
     score: 0,
     moves: levelConfig.moves,
+    hintsRemaining: levelConfig.level >= 21
+      ? Math.max(0, CRUSH_HINTS_PER_LEVEL - Number(state.crushHintsUsed[levelConfig.level] || 0))
+      : null,
     busy: false,
     over: false,
     overlayAction: null
@@ -563,8 +589,20 @@ function startMiniGame(levelNumber = miniGame?.level || state.crushUnlockedLevel
   miniScore.textContent = "0";
   miniTarget.textContent = levelConfig.target;
   miniMoves.textContent = levelConfig.moves;
-  miniMessage.textContent = "Los combos de mi culona crush son gratis en movimientos. Las bombitas explotan alrededor y ayudan.";
+  miniMessage.textContent = levelConfig.level >= 21
+    ? "Desde este nivel, cada combo gasta un movimiento. Tenés tres pistas por nivel bb."
+    : "Los combos de mi culona crush son gratis en movimientos. Las bombitas explotan alrededor y ayudan.";
   renderCrushBoard();
+  updateHintButton();
+  if (showThresholdIntro) {
+    showCrushOverlay({
+      type: "intro",
+      title: "Bien... bien... bien...",
+      text: "Apartir de ahora los combos de culonacrush si cuentan como movimiento.... asi que preparate... muejejejej",
+      button: "¡A jugar!",
+      action: "begin-level"
+    });
+  }
 }
 
 function createCrushBoard(levelConfig = crushLevels[0]) {
@@ -674,12 +712,23 @@ function ensurePlayableBoard() {
 
 function showHint() {
   if (!miniGame || miniGame.busy || miniGame.over) return;
+  if (miniGame.level >= 21 && miniGame.hintsRemaining <= 0) {
+    miniMessage.textContent = "Te quedaste sin pistas para este nivel bb, confío en vos ✨";
+    return;
+  }
   const move = findPossibleSwap();
   if (!move) {
     ensurePlayableBoard();
     renderCrushBoard();
     miniMessage.textContent = "Te acomodé el tablero bb, ahora sí hay jugadas ✨";
     return;
+  }
+
+  if (miniGame.level >= 21) {
+    miniGame.hintsRemaining -= 1;
+    state.crushHintsUsed[miniGame.level] = Number(state.crushHintsUsed[miniGame.level] || 0) + 1;
+    saveState();
+    updateHintButton();
   }
 
   const first = crushBoard.querySelector(`[data-row="${move.a.row}"][data-col="${move.a.col}"]`);
@@ -693,6 +742,16 @@ function showHint() {
     first?.classList.remove("hinted");
     second?.classList.remove("hinted");
   }, 1800);
+}
+
+function updateHintButton() {
+  if (!miniGame || miniGame.level < 21) {
+    hintButton.textContent = "✦ Pista";
+    hintButton.removeAttribute("aria-label");
+    return;
+  }
+  hintButton.textContent = `✦ Pista (${miniGame.hintsRemaining}/${CRUSH_HINTS_PER_LEVEL})`;
+  hintButton.setAttribute("aria-label", `Pistas restantes: ${miniGame.hintsRemaining} de ${CRUSH_HINTS_PER_LEVEL}`);
 }
 
 function selectCrushCell(row, col) {
@@ -738,7 +797,7 @@ function attemptSwap(a, b) {
     const { row, col } = parseCellKey(key);
     return miniGame.board[row][col] === CRUSH_SPECIAL;
   });
-  if (!scoresCrushCombo) miniGame.moves -= 1;
+  if (miniGame.level >= 21 || !scoresCrushCombo) miniGame.moves -= 1;
   resolveMatches(matches);
 }
 
@@ -954,13 +1013,11 @@ function finishMiniGame(won) {
     saveState();
     miniMessage.textContent = "Nivel completado.";
     showCrushOverlay({
-      type: miniGame.level === crushLevels.length ? "final" : "win",
-      title: miniGame.level === crushLevels.length
-        ? "Nivel 20 completado"
-        : miniGame.level >= 11 ? `¡Nivel ${miniGame.level} superado!` : "MUY BIEN AMORRR Q PRO QUE SOSSS <3",
+      type: "win",
+      title: miniGame.level >= 11 ? `¡Nivel ${miniGame.level} superado!` : "MUY BIEN AMORRR Q PRO QUE SOSSS <3",
       text: miniGame.levelConfig.message || "(mi gordita crush *-)",
       button: "Siguiente",
-      action: miniGame.level === crushLevels.length ? "home" : "next"
+      action: miniGame.level === crushLevels.length ? "victory" : "next"
     });
   } else {
     showCrushOverlay({
@@ -993,11 +1050,30 @@ function handleCrushOverlayAction() {
   const action = miniGame?.overlayAction;
   closeCrushOverlay();
   if (action === "next") {
-    startMiniGame(Math.min(crushLevels.length, miniGame.level + 1));
+    const nextLevel = Math.min(crushLevels.length, miniGame.level + 1);
+    startMiniGame(nextLevel, nextLevel === 21);
+    return;
+  }
+  if (action === "begin-level") {
+    startMiniGame(21);
+    return;
+  }
+  if (action === "victory") {
+    showCrushOverlay({
+      type: "final",
+      title: "VICTORIA",
+      text: "muy bien mi amor, que guapota que sos, como siempre superando los obstaculos dificiles para llegar a tu objetivo como siempre hiciste mi vida, mi monona hermosa, fish fish fish jijiji<3",
+      button: "Volver a niveles",
+      action: "levels"
+    });
     return;
   }
   if (action === "retry") {
     startMiniGame(miniGame.level);
+    return;
+  }
+  if (action === "levels") {
+    showCrushLevels();
     return;
   }
   if (action === "home") {
