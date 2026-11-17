@@ -3,7 +3,7 @@ const LOGIN_PASS = "lunita123";
 const STORAGE_KEY = "selenaunicornio-roulette-state-v1";
 const DAILY_RESET_HOUR = 6;
 const RESET_TIME_ZONE = "America/Argentina/Buenos_Aires";
-const CRUSH_PROGRESS_VERSION = 2;
+const CRUSH_PROGRESS_VERSION = 3;
 const CRUSH_HINTS_PER_LEVEL = 3;
 const DEV_INFINITE_SPINS = false;
 const DEV_REPLAY_MINIGAME = false;
@@ -36,7 +36,12 @@ const crushLevels = [
   { level: 22, target: 7, moves: 16, message: "okey okey okey, no me hagas calentaaar bella jugadora" },
   { level: 23, target: 7, moves: 15, message: "emmm emmm.... NO TE LO VOY A PONER TAN FACIL MUJER HERMOSA OK" },
   { level: 24, target: 8, moves: 15, message: "T-TENGO M-MIEDO DIJO EL AURONPLAY, OOOOU NOOO DIJO JERE, JUEGA DEMASIALO QLIAO DIJO HAN..... CONFIO EN VOS NIVEL 25" },
-  { level: 25, target: 8, moves: 14, message: "LO-LOGRASTE... ES IMPOSIBLE GANARLE A LA MEJOR JUGADORA DE CULONACRUSH DE LA HISTORIA.... ME GANASTE PERO.... YA VAS A VER x.x" }
+  { level: 25, target: 8, moves: 14, message: "LO-LOGRASTE... ES IMPOSIBLE GANARLE A LA MEJOR JUGADORA DE CULONACRUSH DE LA HISTORIA.... ME GANASTE PERO.... YA VAS A VER x.x" },
+  { level: 26, target: 9, moves: 14, message: "JOJOJO parece que entrenaste, muy bien muy bien a ver si podes con el siguiente muejejej" },
+  { level: 27, target: 9, moves: 13, message: "OKEY OKEY OKEY ME PARECE QUE VOY A TENER QUE COMPLICARLO UN CHIQUITO MAS" },
+  { level: 28, target: 10, moves: 13, message: "NOOOOO POR QUEE SOS TAN BUEEENAAAAA LPM" },
+  { level: 29, target: 10, moves: 12, message: "UFF UFF UFF NONO QUIERO CREER QUE AHORA SI TE VA A COSTAR" },
+  { level: 30, target: 10, moves: 11, message: ".... sos demasiada buena, no puedo hacer nada contra tu nivel de culonacrush..." }
 ];
 const crushPieces = [
   { id: CRUSH_SPECIAL, label: "Ella", icon: "💖" },
@@ -173,11 +178,17 @@ function loadState() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
     const loaded = { ...fallback, ...saved };
     if (!loaded.crushHintsUsed || typeof loaded.crushHintsUsed !== "object") loaded.crushHintsUsed = {};
-    if (Number(saved.crushProgressVersion || 1) < CRUSH_PROGRESS_VERSION) {
+    const savedProgressVersion = Number(saved.crushProgressVersion || 1);
+    if (savedProgressVersion < 2) {
       if (loaded.crushCompleted && loaded.crushUnlockedLevel >= 20) {
         loaded.crushUnlockedLevel = Math.max(loaded.crushUnlockedLevel, 21);
+        loaded.crushCompleted = false;
       }
+    } else if (savedProgressVersion < CRUSH_PROGRESS_VERSION && loaded.crushCompleted) {
+      loaded.crushUnlockedLevel = Math.max(loaded.crushUnlockedLevel, 26);
       loaded.crushCompleted = false;
+    }
+    if (savedProgressVersion < CRUSH_PROGRESS_VERSION) {
       loaded.crushProgressVersion = CRUSH_PROGRESS_VERSION;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
     }
@@ -552,7 +563,7 @@ function renderLevelGrid() {
       <button class="level-button ${completed ? "completed" : ""}" type="button" data-level="${level.level}" ${unlocked ? "" : "disabled"}>
         <span class="level-number">${unlocked ? level.level : "🔒"}</span>
         ${completed ? '<span class="level-star" aria-label="Nivel superado">★</span>' : ""}
-        ${milestone && unlocked ? `<span class="level-stamp" aria-label="Hito cada cinco niveles">${level.level === 25 ? "👑" : "🎀"}</span>` : ""}
+        ${milestone && unlocked ? `<span class="level-stamp" aria-label="Hito cada cinco niveles">${level.level === 30 ? "👑" : "🎀"}</span>` : ""}
         <small>${completed ? "Pasado" : unlocked ? `${level.target} combos` : "Bloqueado"}</small>
       </button>
     `;
@@ -561,7 +572,7 @@ function renderLevelGrid() {
   levelGrid.querySelectorAll(".level-button:not(:disabled)").forEach((button) => {
     button.addEventListener("click", () => {
       const level = Number(button.dataset.level);
-      startMiniGame(level, level === 21);
+      startMiniGame(level, level === 21 || level === 26);
     });
   });
 }
@@ -595,10 +606,13 @@ function startMiniGame(levelNumber = miniGame?.level || state.crushUnlockedLevel
   renderCrushBoard();
   updateHintButton();
   if (showThresholdIntro) {
+    const isLevel26 = levelConfig.level === 26;
     showCrushOverlay({
       type: "intro",
-      title: "Bien... bien... bien...",
-      text: "Apartir de ahora los combos de culonacrush si cuentan como movimiento.... asi que preparate... muejejejej",
+      title: isLevel26 ? "Nivel 26" : "Bien... bien... bien...",
+      text: isLevel26
+        ? "Bueeeeeno bueeeeno bueeeno, tocó ponerse serio.... SUERTE la vas a necesitar jejeje"
+        : "Apartir de ahora los combos de culonacrush si cuentan como movimiento.... asi que preparate... muejejejej",
       button: "¡A jugar!",
       action: "begin-level"
     });
@@ -677,7 +691,10 @@ function renderCrushBoard(exploding = new Set()) {
 }
 
 function findPossibleSwap() {
-  let firstRegularMove = null;
+  let bestCrushMove = null;
+  let bestCrushScore = -Infinity;
+  let bestSetupMove = null;
+  let bestSetupScore = -Infinity;
   for (let row = 0; row < CRUSH_SIZE; row += 1) {
     for (let col = 0; col < CRUSH_SIZE; col += 1) {
       const neighbors = [];
@@ -696,12 +713,23 @@ function findPossibleSwap() {
           const cell = parseCellKey(key);
           return miniGame.board[cell.row][cell.col] === CRUSH_SPECIAL;
         });
-        if (scoresCrush) return { ...move, scoresCrush: true };
-        if (!firstRegularMove) firstRegularMove = { ...move, scoresCrush: false };
+        const matchedCells = [...matches].map(parseCellKey);
+        const specialCount = matchedCells.filter((cell) => miniGame.board[cell.row][cell.col] === CRUSH_SPECIAL).length;
+        const bombCount = matchedCells.filter((cell) => miniGame.board[cell.row][cell.col] === CRUSH_BOMB).length;
+        const clearedCount = expandBombMatches(matches).size;
+        const score = specialCount * 1000 + bombCount * 100 + clearedCount * 10 + matches.size;
+
+        if (scoresCrush && score > bestCrushScore) {
+          bestCrushMove = { ...move, scoresCrush: true };
+          bestCrushScore = score;
+        } else if (!scoresCrush && score > bestSetupScore) {
+          bestSetupMove = { ...move, scoresCrush: false };
+          bestSetupScore = score;
+        }
       }
     }
   }
-  return firstRegularMove;
+  return bestCrushMove || bestSetupMove;
 }
 
 function ensurePlayableBoard() {
@@ -736,8 +764,8 @@ function showHint() {
   first?.classList.add("hinted");
   second?.classList.add("hinted");
   miniMessage.textContent = move.scoresCrush
-    ? "¡Acá podés hacer combo de mi culona crush! ✨"
-    : "Probá este cambio bb, prepara un combo ✨";
+    ? "Mejor jugada: acá hacés combo de mi culona crush 💖"
+    : "Esta es la mejor jugada para abrir el tablero y preparar combos ✨";
   window.setTimeout(() => {
     first?.classList.remove("hinted");
     second?.classList.remove("hinted");
@@ -1051,18 +1079,18 @@ function handleCrushOverlayAction() {
   closeCrushOverlay();
   if (action === "next") {
     const nextLevel = Math.min(crushLevels.length, miniGame.level + 1);
-    startMiniGame(nextLevel, nextLevel === 21);
+    startMiniGame(nextLevel, nextLevel === 21 || nextLevel === 26);
     return;
   }
   if (action === "begin-level") {
-    startMiniGame(21);
+    startMiniGame(miniGame.level);
     return;
   }
   if (action === "victory") {
     showCrushOverlay({
       type: "final",
       title: "VICTORIA",
-      text: "muy bien mi amor, que guapota que sos, como siempre superando los obstaculos dificiles para llegar a tu objetivo como siempre hiciste mi vida, mi monona hermosa, fish fish fish jijiji<3",
+      text: "Espero te haya gustado amor, lo hice con mucha dedicacion pensando en que cosas podrian gustarte y hacer lo mejor para que la pases bien tambien. En serio lo sos todo para mi y siempre vas a ser importante, desde el dia que llegaste lo sos, a pesar de la distancia sos mi dia a dia y me encanta que seas parte de eso. Te amo mucho<3",
       button: "Volver a niveles",
       action: "levels"
     });
