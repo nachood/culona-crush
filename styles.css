@@ -769,7 +769,10 @@ input {
 }
 
 .ad-button {
-  min-width: 82px;
+  width: 90px;
+  min-width: 90px;
+  min-height: 48px;
+  flex: 0 0 90px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -781,8 +784,11 @@ input {
 }
 
 .ad-button img {
+  display: block;
   width: 43px;
   height: 34px;
+  max-width: 43px;
+  flex: 0 0 43px;
   object-fit: contain;
 }
 
