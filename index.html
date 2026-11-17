@@ -90,6 +90,10 @@
           <div id="crushBoard" class="crush-board" role="grid" aria-label="Tablero de Culona Crush"></div>
           <div id="miniMessage" class="mini-message" role="status">Uní 3 o más fichas de mi culona crush. Las bombitas ayudan.</div>
           <div class="crush-actions">
+            <button id="adButton" class="secondary-button ad-button" type="button" aria-label="Ver publicidad para ganar 3 movimientos" title="Ver publicidad: +3 movimientos">
+              <img src="ad.png" alt="AD">
+              <span>+3</span>
+            </button>
             <button id="hintButton" class="secondary-button hint-button" type="button">✦ Pista</button>
             <button id="backToLevelsButton" class="ghost-button" type="button">Niveles</button>
             <button id="restartMiniGameButton" class="secondary-button" type="button">Reintentar</button>
@@ -100,6 +104,8 @@
           <div id="crushOverlayCard" class="crush-overlay-card">
             <h3 id="crushOverlayTitle"></h3>
             <p id="crushOverlayText"></p>
+            <p id="crushOverlayNote" class="crush-overlay-note hidden"></p>
+            <button id="crushOverlayAdButton" class="secondary-button ad-revive-button hidden" type="button">Ver AD y revivir (+3)</button>
             <button id="crushOverlayButton" class="primary-button" type="button">Seguir</button>
           </div>
         </div>
@@ -111,6 +117,19 @@
     <div class="reward-modal-card">
       <button id="closeRewardModalButton" class="reward-modal-close" type="button" aria-label="Cerrar premio">×</button>
       <div id="rewardModalContent"></div>
+    </div>
+  </div>
+
+  <div id="crushAdModal" class="crush-ad-modal hidden" role="dialog" aria-modal="true" aria-labelledby="crushAdTitle">
+    <div class="crush-ad-card">
+      <div class="crush-ad-heading">
+        <h2 id="crushAdTitle">Publicidad</h2>
+        <span id="crushAdCounter"></span>
+      </div>
+      <div class="crush-ad-frame-wrap">
+        <img id="crushAdFrame" class="crush-ad-frame" alt="Fotograma de publicidad">
+      </div>
+      <button id="crushAdCloseButton" class="primary-button hidden" type="button">Cerrar</button>
     </div>
   </div>
 

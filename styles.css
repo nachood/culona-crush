@@ -768,6 +768,36 @@ input {
   box-shadow: 0 4px 0 #e3b848;
 }
 
+.ad-button {
+  min-width: 82px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 2px solid rgba(236, 47, 147, 0.35);
+  background: linear-gradient(135deg, #fff, #ffd8ed);
+  box-shadow: 0 4px 0 rgba(236, 47, 147, 0.2);
+}
+
+.ad-button img {
+  width: 43px;
+  height: 34px;
+  object-fit: contain;
+}
+
+.ad-button span {
+  color: var(--hot-pink);
+  font-size: 13px;
+  font-weight: 1000;
+}
+
+.ad-button:disabled {
+  cursor: default;
+  filter: grayscale(0.5);
+  opacity: 0.6;
+}
+
 .crush-overlay {
   position: absolute;
   z-index: 6;
@@ -825,7 +855,88 @@ input {
   text-wrap: pretty;
 }
 
+.crush-overlay-card .crush-overlay-note {
+  max-width: 38ch;
+  color: var(--hot-pink);
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
 .crush-overlay-card .primary-button {
+  width: auto;
+  min-width: 180px;
+}
+
+.crush-overlay-card .ad-revive-button {
+  width: auto;
+  min-width: 180px;
+  margin-top: 2px;
+  color: #713778;
+  border-color: rgba(185, 140, 255, 0.55);
+  background: linear-gradient(135deg, #fff, #f0ddff);
+}
+
+.crush-ad-modal {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(67, 27, 54, 0.62);
+  backdrop-filter: blur(5px);
+}
+
+.crush-ad-card {
+  width: min(820px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  border: 3px solid #fff;
+  border-radius: 20px;
+  padding: clamp(12px, 3vw, 22px);
+  background: linear-gradient(145deg, #fff, #ffe8f5);
+  box-shadow: 0 10px 0 rgba(236, 47, 147, 0.28), 0 24px 70px rgba(35, 13, 28, 0.35);
+}
+
+.crush-ad-heading {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-weight: 1000;
+}
+
+.crush-ad-heading h2 {
+  margin: 0;
+  color: var(--hot-pink);
+  font-family: var(--font-display);
+  font-size: 22px;
+}
+
+.crush-ad-frame-wrap {
+  width: 100%;
+  height: min(62vh, 560px);
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid rgba(236, 47, 147, 0.18);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.crush-ad-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.crush-ad-card .primary-button {
   width: auto;
   min-width: 180px;
 }
@@ -1160,5 +1271,10 @@ input {
 
   .result-card {
     min-height: 280px;
+  }
+
+  .crush-ad-frame-wrap {
+    height: min(58vh, 460px);
+    min-height: 180px;
   }
 }

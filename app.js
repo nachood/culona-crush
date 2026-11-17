@@ -5,12 +5,18 @@ const DAILY_RESET_HOUR = 6;
 const RESET_TIME_ZONE = "America/Argentina/Buenos_Aires";
 const CRUSH_PROGRESS_VERSION = 3;
 const CRUSH_HINTS_PER_LEVEL = 3;
+const CRUSH_AD_REWARD = 3;
 const DEV_INFINITE_SPINS = false;
 const DEV_REPLAY_MINIGAME = false;
 const CRUSH_AVATAR_IMAGE = "culonacrush.png";
 const CRUSH_SIZE = 7;
 const CRUSH_SPECIAL = "ella";
 const CRUSH_BOMB = "bomb";
+const crushAds = [
+  { id: "publi1", title: "Publicidad 1", frames: ["publi1.png", "publi1-2.png", "publi1-3.png", "publi1-4.png", "publi1-5.png", "publi1-6.png"] },
+  { id: "publi2", title: "Publicidad 2", frames: ["publi2.png", "publi2-2.png", "publi2-3.png", "publi2-4.png"] },
+  { id: "publi3", title: "Publicidad 3", frames: ["publi3.png", "publi3-2.png"] }
+];
 const crushLevels = [
   { level: 1, target: 1, moves: 18 },
   { level: 2, target: 1, moves: 16 },
@@ -98,6 +104,8 @@ let wheelRotation = 0;
 let spinning = false;
 let miniGame = null;
 let pendingFinalPrompt = false;
+let activeCrushAd = null;
+let crushAdTimer = null;
 
 const loginScreen = document.getElementById("loginScreen");
 const gameScreen = document.getElementById("gameScreen");
@@ -123,6 +131,7 @@ const crushGame = document.getElementById("crushGame");
 const startCrushButton = document.getElementById("startCrushButton");
 const backToCrushHomeButton = document.getElementById("backToCrushHomeButton");
 const backToLevelsButton = document.getElementById("backToLevelsButton");
+const adButton = document.getElementById("adButton");
 const hintButton = document.getElementById("hintButton");
 const levelGrid = document.getElementById("levelGrid");
 const crushBoard = document.getElementById("crushBoard");
@@ -135,7 +144,14 @@ const crushOverlay = document.getElementById("crushOverlay");
 const crushOverlayCard = document.getElementById("crushOverlayCard");
 const crushOverlayTitle = document.getElementById("crushOverlayTitle");
 const crushOverlayText = document.getElementById("crushOverlayText");
+const crushOverlayNote = document.getElementById("crushOverlayNote");
+const crushOverlayAdButton = document.getElementById("crushOverlayAdButton");
 const crushOverlayButton = document.getElementById("crushOverlayButton");
+const crushAdModal = document.getElementById("crushAdModal");
+const crushAdTitle = document.getElementById("crushAdTitle");
+const crushAdCounter = document.getElementById("crushAdCounter");
+const crushAdFrame = document.getElementById("crushAdFrame");
+const crushAdCloseButton = document.getElementById("crushAdCloseButton");
 const rewardModal = document.getElementById("rewardModal");
 const rewardModalContent = document.getElementById("rewardModalContent");
 const closeRewardModalButton = document.getElementById("closeRewardModalButton");
@@ -161,8 +177,11 @@ loginForm.addEventListener("submit", (event) => {
 if (spinButton) spinButton.addEventListener("click", spinWheel);
 if (playMiniGameButton) playMiniGameButton.addEventListener("click", openMiniGame);
 if (closeMiniGameButton) closeMiniGameButton.addEventListener("click", closeMiniGame);
-restartMiniGameButton.addEventListener("click", startMiniGame);
+restartMiniGameButton.addEventListener("click", () => startMiniGame());
 hintButton.addEventListener("click", showHint);
+adButton.addEventListener("click", () => openCrushAd(false));
+crushOverlayAdButton.addEventListener("click", () => openCrushAd(true));
+crushAdCloseButton.addEventListener("click", completeCrushAd);
 startCrushButton.addEventListener("click", showCrushLevels);
 backToCrushHomeButton.addEventListener("click", showCrushHome);
 backToLevelsButton.addEventListener("click", showCrushLevels);
@@ -178,6 +197,7 @@ function loadState() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
     const loaded = { ...fallback, ...saved };
     if (!loaded.crushHintsUsed || typeof loaded.crushHintsUsed !== "object") loaded.crushHintsUsed = {};
+    if (!Array.isArray(loaded.crushAdsSeen)) loaded.crushAdsSeen = [];
     const savedProgressVersion = Number(saved.crushProgressVersion || 1);
     if (savedProgressVersion < 2) {
       if (loaded.crushCompleted && loaded.crushUnlockedLevel >= 20) {
@@ -206,6 +226,7 @@ function makeFreshState() {
     crushUnlockedLevel: 1,
     crushCompleted: false,
     crushHintsUsed: {},
+    crushAdsSeen: [],
     crushProgressVersion: CRUSH_PROGRESS_VERSION,
     spins: 1,
     extraWonForDay: false,
@@ -586,6 +607,7 @@ function startMiniGame(levelNumber = miniGame?.level || state.crushUnlockedLevel
     selected: null,
     score: 0,
     moves: levelConfig.moves,
+    adUsed: false,
     hintsRemaining: levelConfig.level >= 21
       ? Math.max(0, CRUSH_HINTS_PER_LEVEL - Number(state.crushHintsUsed[levelConfig.level] || 0))
       : null,
@@ -688,6 +710,7 @@ function renderCrushBoard(exploding = new Set()) {
       crushBoard.appendChild(button);
     });
   });
+  updateAdButton();
 }
 
 function findPossibleSwap() {
@@ -780,6 +803,85 @@ function updateHintButton() {
   }
   hintButton.textContent = `✦ Pista (${miniGame.hintsRemaining}/${CRUSH_HINTS_PER_LEVEL})`;
   hintButton.setAttribute("aria-label", `Pistas restantes: ${miniGame.hintsRemaining} de ${CRUSH_HINTS_PER_LEVEL}`);
+}
+
+function updateAdButton() {
+  if (!miniGame) {
+    adButton.disabled = true;
+    return;
+  }
+  adButton.disabled = miniGame.adUsed || miniGame.busy || miniGame.over;
+  adButton.setAttribute("aria-label", miniGame.adUsed
+    ? "Publicidad ya usada en este intento"
+    : "Ver publicidad para ganar 3 movimientos");
+  adButton.title = miniGame.adUsed ? "Ya viste la publicidad en este intento" : "Ver publicidad: +3 movimientos";
+}
+
+function getNextCrushAd() {
+  const seen = state.crushAdsSeen.filter((id) => crushAds.some((ad) => ad.id === id));
+  if (seen.length >= crushAds.length) {
+    state.crushAdsSeen = [];
+    saveState();
+  }
+  return crushAds.find((ad) => !state.crushAdsSeen.includes(ad.id)) || crushAds[0];
+}
+
+function openCrushAd(revive) {
+  if (!miniGame || miniGame.adUsed || miniGame.busy) return;
+  if (miniGame.over && !revive) return;
+
+  const ad = getNextCrushAd();
+  if (!ad) return;
+  closeCrushOverlay();
+  activeCrushAd = { ad, frameIndex: 0, revive };
+  crushAdTitle.textContent = ad.title;
+  crushAdModal.classList.remove("hidden");
+  crushAdCloseButton.classList.add("hidden");
+  showCrushAdFrame();
+}
+
+function showCrushAdFrame() {
+  if (!activeCrushAd) return;
+  const { ad, frameIndex } = activeCrushAd;
+  crushAdFrame.src = ad.frames[frameIndex];
+  crushAdCounter.textContent = `${frameIndex + 1} / ${ad.frames.length}`;
+
+  if (frameIndex === ad.frames.length - 1) {
+    crushAdCloseButton.classList.remove("hidden");
+    return;
+  }
+
+  crushAdTimer = window.setTimeout(() => {
+    activeCrushAd.frameIndex += 1;
+    showCrushAdFrame();
+  }, 3800);
+}
+
+function completeCrushAd() {
+  if (!activeCrushAd || !miniGame) return;
+  window.clearTimeout(crushAdTimer);
+  const { ad } = activeCrushAd;
+  activeCrushAd = null;
+  crushAdModal.classList.add("hidden");
+  miniGame.adUsed = true;
+  miniGame.moves += CRUSH_AD_REWARD;
+  miniGame.over = false;
+  miniGame.selected = null;
+
+  const seen = new Set(state.crushAdsSeen);
+  seen.add(ad.id);
+  state.crushAdsSeen = seen.size === crushAds.length ? [] : [...seen];
+  saveState();
+
+  miniMessage.textContent = `Muy bien, ganaste ${CRUSH_AD_REWARD} movimientos extras bb<3`;
+  renderCrushBoard();
+  showCrushOverlay({
+    type: "reward",
+    title: "¡Muy bien, bb!",
+    text: `Ganaste ${CRUSH_AD_REWARD} movimientos extra 💖`,
+    button: "Seguir jugando",
+    action: "continue"
+  });
 }
 
 function selectCrushCell(row, col) {
@@ -1052,8 +1154,12 @@ function finishMiniGame(won) {
       type: "lose",
       title: "Uy, casi bb",
       text: "No pasa nada mi amor, intentalo de vuelta que como siempre vas a pasarlo mi vida",
+      note: miniGame.adUsed
+        ? "Acordate que podes ver los anuncios para sumar 3 movimientos extras bb<3"
+        : "Podes revivir con 3 movimientos si ves mi publicidad",
       button: "Reintentar",
-      action: "retry"
+      action: "retry",
+      secondaryButton: miniGame.adUsed ? "" : "Ver AD y revivir (+3)"
     });
   }
 
@@ -1061,10 +1167,14 @@ function finishMiniGame(won) {
   renderControls();
 }
 
-function showCrushOverlay({ type, title, text, button, action }) {
+function showCrushOverlay({ type, title, text, note = "", button, action, secondaryButton = "" }) {
   miniGame.overlayAction = action;
   crushOverlayTitle.textContent = title;
   crushOverlayText.textContent = text;
+  crushOverlayNote.textContent = note;
+  crushOverlayNote.classList.toggle("hidden", !note);
+  crushOverlayAdButton.textContent = secondaryButton;
+  crushOverlayAdButton.classList.toggle("hidden", !secondaryButton);
   crushOverlayButton.textContent = button;
   crushOverlayCard.className = `crush-overlay-card ${type === "lose" ? "kiss-zoom" : ""} ${type === "final" ? "final-card" : ""}`;
   crushOverlay.classList.remove("hidden");
@@ -1072,6 +1182,8 @@ function showCrushOverlay({ type, title, text, button, action }) {
 
 function closeCrushOverlay() {
   crushOverlay.classList.add("hidden");
+  crushOverlayNote.classList.add("hidden");
+  crushOverlayAdButton.classList.add("hidden");
 }
 
 function handleCrushOverlayAction() {
@@ -1094,6 +1206,10 @@ function handleCrushOverlayAction() {
       button: "Volver a niveles",
       action: "levels"
     });
+    return;
+  }
+  if (action === "continue") {
+    renderCrushBoard();
     return;
   }
   if (action === "retry") {
